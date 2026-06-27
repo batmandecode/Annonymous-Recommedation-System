@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CommunalTable — Anonymous group restaurant picks</title>
+<meta name="description" content="Anonymous group voting for restaurants. Combine cuisine, budget and allergies fairly." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/SplitText.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+
+<style>
+/* ===== DESIGN TOKENS ===== */
+:root {
+  --radius: 0.875rem;
+  --background: #050505;
+  --foreground: #FFFFFF;
+  --card: #111111;
+  --card-foreground: #FFFFFF;
+  --primary: #06B6D4;
+  --primary-foreground: #050505;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #FFFFFF;
+  --muted: #1a1a1a;
+  --muted-foreground: #999999;
+  --border: rgba(255,255,255,0.1);
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #22c55e;
+  --shadow-warm: 0 0 40px rgba(6,182,212,0.15);
+  --shadow-soft: 0 8px 30px rgba(0,0,0,0.5);
+  --gradient-hero: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(6,182,212,0.15), transparent 70%);
+  --accent-gradient: linear-gradient(to right, #06B6D4, #EC4899);
+}
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', sans-serif; background-color: var(--background); color: var(--foreground); min-height: 100vh; line-height: 1.5; }
+h1,h2,h3,h4 { font-family: 'Inter', sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; }
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+img { max-width: 100%; }
+
+/* ===== LAYOUT ===== */
+.container { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem; }
+@media (min-width: 640px) { .container { padding: 0 2rem; } }
+
+/* ===== TYPOGRAPHY ===== */
+.text-primary { color: var(--primary); }
+.text-muted { color: var(--muted-foreground); }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.font-semibold { font-weight: 600; }
+.font-bold { font-weight: 700; }
+.tracking-wide { letter-spacing: 0.05em; }
+.uppercase { text-transform: uppercase; }
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.6rem 1.25rem; border-radius: 9999px;
+  font-size: 0.875rem; font-weight: 500; border: none;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.btn-primary { background: var(--accent-gradient); color: #050505; font-weight: 700; }
+.btn-primary:hover { transform: scale(1.02); opacity: 0.92; }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn-outline { background: transparent; color: var(--foreground); border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(8px); }
+.btn-outline:hover { border-color: #06B6D4; color: #06B6D4; }
+.btn-lg { padding: 0.75rem 1.75rem; font-size: 1rem; }
+.btn-sm { padding: 0.4rem 0.875rem; font-size: 0.8125rem; }
+
+/* ===== CARD ===== */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow-soft); }
+.card-padded { padding: 1.5rem; }
+@media (min-width: 640px) { .card-padded { padding: 2rem; } }
+
+/* ===== INPUT ===== */
+.input-field {
+  width: 100%; height: 2.5rem; padding: 0 0.75rem;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--secondary); color: var(--foreground);
+  font-size: 0.875rem; outline: none; transition: border-color 0.15s;
+}
+.input-field:focus { border-color: var(--primary); }
+.input-field::placeholder { color: var(--muted-foreground); }
+
+.badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+.badge-primary { background: rgba(6,182,212,0.12); color: var(--primary); }
+/* ===== HEADER ===== */
+.site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid rgba(255,255,255,0.07); background: rgba(5,5,5,0.85); backdrop-filter: blur(12px); }
+.site-header-inner { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem 1.25rem; max-width: 1100px; margin: 0 auto; }
+@media (min-width: 640px) { .site-header-inner { padding: 0.875rem 2rem; } }
+.site-logo { display: flex; align-items: center; gap: 0.5rem; font-size: 1.125rem; font-weight: 600; color: var(--primary); letter-spacing: -0.01em; }
+.site-nav { display: none; gap: 1.5rem; align-items: center; }
+@media (min-width: 640px) { .site-nav { display: flex; } }
+.site-nav a { font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6); letter-spacing: 0.05em; text-transform: uppercase; transition: color 0.2s; }
+.site-nav a:hover { color: #ffffff; }
+.site-nav a.active { color: #06B6D4; }
+/* ===== FOOTER ===== */
+.site-footer { margin-top: 4rem; padding: 1.5rem 0; border-top: 1px solid rgba(255,255,255,0.08); font-size: 0.75rem; color: var(--muted-foreground); }
+.site-footer-inner { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.site-footer-links { display: flex; gap: 1rem; }
+
+/* ===== PAGES / ROUTING ===== */
+.page { display: none; }
+.page.active { display: block; }
+main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem; }
+@media (min-width: 640px) { main { padding: 2.5rem 2rem; } }
+
+/* ===== HERO ===== */
+.hero-section { position: relative; overflow: hidden; border-radius: calc(var(--radius) + 12px); border: 1px solid rgba(255,255,255,0.07); background: var(--gradient-hero); }
+.hero-inner { position: relative; display: grid; align-items: center; gap: 1.5rem; padding: 3.5rem 1.5rem; }
+@media (min-width: 640px) { .hero-inner { padding: 5rem 3rem; } }
+@media (min-width: 900px) { .hero-inner { grid-template-columns: 1.1fr 1fr; } }
+.hero-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 9999px; border: 1px solid rgba(6,182,212,0.4); background: rgba(6,182,212,0.08); font-size: 0.75rem; font-weight: 500; color: #06B6D4; backdrop-filter: blur(6px); }
+.hero-badge-dot { width: 0.375rem; height: 0.375rem; border-radius: 50%; background: #ef4444; animation: pulse 2s infinite; }
+.hero-title { margin-top: 1rem; font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.01em; text-transform: uppercase; }
+.hero-title .brand { display: block; }
+.hero-title .brand span { background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: inline-block; }.hero-title .sub { display: block; color: #ffffff; }
+.hero-underline { position: relative; display: inline-block; }
+.hero-underline::after { content: ''; position: absolute; bottom: -4px; left: 0; height: 3px; width: 100%; background: var(--accent-gradient); border-radius: 2px; transform: scaleX(0); transform-origin: left; animation: underlineIn 1.2s ease-out 1s forwards; }
+.hero-desc { margin-top: 1.25rem; font-size: clamp(0.9375rem, 2vw, 1.125rem); color: #999999; max-width: 36rem; font-weight: 300; }
+.hero-actions { margin-top: 1.75rem; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+/* 3D Cube */
+.hero-img-wrap { position: relative; height: 380px; display: flex; align-items: center; justify-content: center; perspective: 2000px; }
+@media (min-width: 640px) { .hero-img-wrap { height: 440px; } }
+.cube-wrapper { width: 300px; height: 300px; transform-style: preserve-3d; animation: cubeRotate 12s linear infinite; position: relative; }
+@media (min-width: 640px) { .cube-wrapper { width: 360px; height: 360px; } }
+.cube-face { position: absolute; width: 100%; height: 100%; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); backface-visibility: hidden; }
+.cube-face img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(30%); transition: filter 0.4s; }
+.cube-face:hover img { filter: grayscale(0%); }
+.cube-face-label { position: absolute; bottom: 1rem; left: 0; right: 0; text-align: center; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 8px rgba(0,0,0,0.8); }
+.cube-face.front  { transform: rotateX(0deg)    translateZ(150px); }
+.cube-face.bottom { transform: rotateX(-90deg)   translateZ(150px); }
+.cube-face.back   { transform: rotateX(-180deg)  translateZ(150px); }
+.cube-face.top    { transform: rotateX(90deg)    translateZ(150px); }
+@media (min-width: 640px) {
+  .cube-face.front  { transform: rotateX(0deg)    translateZ(180px); }
+  .cube-face.bottom { transform: rotateX(-90deg)   translateZ(180px); }
+  .cube-face.back   { transform: rotateX(-180deg)  translateZ(180px); }
+  .cube-face.top    { transform: rotateX(90deg)    translateZ(180px); }
+}
+.hero-float-chip { position: absolute; background: rgba(17,17,17,0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 9999px; padding: 0.25rem 0.75rem; font-size: 0.75rem; font-weight: 600; color: #06B6D4; backdrop-filter: blur(6px); animation: float 5s ease-in-out infinite; }
+.hero-float-chip.anon { top: 1rem; left: 0.5rem; animation-delay: 0s; }
+.hero-float-chip.sync { bottom: 1.5rem; right: 0.5rem; animation-delay: 1.5s; }
+@keyframes cubeRotate { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
+
+/* Marquee */
+.marquee-strip { border-top: 1px solid rgba(255,255,255,0.08); background: rgba(17,17,17,0.8); backdrop-filter: blur(6px); overflow: hidden; -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+.marquee-inner { display: flex; gap: 3rem; padding: 0.75rem 0; font-size: 0.875rem; font-weight: 500; color: rgba(255,255,255,0.6); white-space: nowrap; animation: marquee 28s linear infinite; }
+
+/* ===== LOCATION SECTION ===== */
+.location-section { display: grid; gap: 1.5rem; border: 1px solid var(--border); border-radius: calc(var(--radius) + 12px); background: var(--card); padding: 1.5rem; box-shadow: var(--shadow-soft); }
+@media (min-width: 640px) { .location-section { padding: 2rem; } }
+@media (min-width: 900px) { .location-section { grid-template-columns: 1.1fr 1fr; } }
+.label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); }
+.step-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary); }
+.select-field { width: 100%; height: 2.5rem; padding: 0 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--secondary); color: var(--foreground); font-size: 0.875rem; outline: none; cursor: pointer; transition: border-color 0.15s; margin-top: 0.375rem; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.6rem center; padding-right: 2rem; }
+.select-field:focus { border-color: var(--primary); }
+.select-field:disabled { opacity: 0.55; cursor: not-allowed; }
+#map { height: 288px; width: 100%; border-radius: calc(var(--radius) + 4px); border: 1px solid var(--border); background: var(--muted); }
+
+/* ===== THEMES GRID ===== */
+.themes-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 640px) { .themes-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .themes-grid { grid-template-columns: repeat(5, 1fr); } }
+.theme-card { position: relative; aspect-ratio: 4/5; overflow: hidden; border-radius: calc(var(--radius) + 12px); border: 1px solid var(--border); box-shadow: var(--shadow-soft); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+.theme-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-warm); }
+.theme-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 0.7s; }
+.theme-card:hover img { transform: scale(1.1); }
+.theme-card-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.25) 50%, transparent 100%); }
+.theme-card-content { position: absolute; left: 0; right : 0; bottom: 0; padding: 1rem; color: white; }
+.theme-card-emoji { font-size: 1.5rem; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
+.theme-card-label { margin-top: 0.25rem; font-size: 1rem; font-weight: 700; }
+.theme-card-hint { margin-top: 0.125rem; font-size: 0.6875rem; opacity: 0.9; }
+
+/* ===== SIZE PAGE ===== */
+.size-card { max-width: 32rem; margin: 0 auto; text-align: center; padding: 2.5rem; border: 1px solid var(--border); border-radius: calc(var(--radius) + 12px); box-shadow: var(--shadow-warm); background: var(--card); }
+.size-input { width: 10rem; height: 4rem; margin: 0 auto; display: block; text-align: center; font-size: 1.875rem; font-weight: 700; background: #1a1a1a; color: #ffffff; border: 1px solid rgba(255,255,255,0.15); border-radius: var(--radius); outline: none; margin-top: 1.75rem; }
+.size-input:focus { border-color: var(--primary); }
+
+/* ===== COLLECT PAGE ===== */
+.collect-grid { display: grid; gap: 1.25rem; }
+@media (min-width: 960px) { .collect-grid { grid-template-columns: 1fr 340px; } }
+.progress-dots { display: flex; gap: 0.25rem; align-items: center; }
+.progress-dot { height: 0.5rem; width: 1.5rem; border-radius: 9999px; }
+.progress-dot.done { background: var(--primary); }
+.progress-dot.current { background: rgba(6,182,212,0.5); }
+.progress-dot.todo { background: var(--border); }
+
+/* Cuisine chips — matching Image 2 style */
+.cuisine-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.cuisine-tag { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.3rem 0.875rem; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-size: 0.875rem; cursor: pointer; border: none; transition: opacity 0.15s; }
+.cuisine-tag:hover { opacity: 0.85; }
+.cuisine-suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.625rem; }
+.cuisine-suggestion-btn {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.35rem 0.875rem; border-radius: 9999px;
+  border: 1.5px solid var(--border); background: var(--card);
+  font-size: 0.8125rem; font-weight: 500; cursor: pointer;
+  color: var(--foreground); transition: border-color 0.15s, background 0.15s;
+}
+.cuisine-suggestion-btn:hover { border-color: var(--primary); background: oklch(0.58 0.18 38 / 0.06); color: var(--primary); }
+
+.allergy-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+.allergy-btn { padding: 0.75rem 0.5rem; border-radius: 0.625rem; border: 1px solid var(--border); background: var(--card); cursor: pointer; text-align: center; font-size: 0.875rem; font-weight: 500; text-transform: capitalize; transition: all 0.15s; }
+.allergy-btn.on { border-color: var(--destructive); background: oklch(0.55 0.22 27 / 0.1); color: var(--destructive); }
+.allergy-btn:not(.on):hover { border-color: oklch(0.58 0.18 38 / 0.4); }
+.allergy-emoji { font-size: 1.25rem; display: block; margin-bottom: 0.25rem; }
+.privacy-box { border-radius: calc(var(--radius) + 4px); background: var(--primary); color: var(--primary-foreground); padding: 1.25rem; box-shadow: var(--shadow-warm); }
+
+/* ===== RESULT PAGE ===== */
+/* Success banner */
+.result-success-banner {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.875rem 1.25rem; border-radius: calc(var(--radius) + 4px);
+  background: oklch(0.96 0.06 145 / 0.5); border: 1px solid oklch(0.78 0.1 145);
+  color: oklch(0.3 0.1 150); font-weight: 600; font-size: 0.9375rem;
+}
+/* Two-column layout */
+.result-layout { display: grid; gap: 1.5rem; align-items: start; }
+@media (min-width: 860px) { .result-layout { grid-template-columns: 260px 1fr; } }
+
+/* Sidebar */
+.result-sidebar { border: 1px solid var(--border); border-radius: calc(var(--radius)+8px); background: var(--card); padding: 1.25rem; box-shadow: var(--shadow-soft); }
+.sidebar-section {
+  padding: 10px;
+}
+.sidebar-title { font-size: 0.9375rem; font-weight: 700; margin-bottom: 0.875rem; }
+.sidebar-row { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.8125rem; padding: 0.375rem 0; border-bottom: 1px solid var(--border); }
+.sidebar-row:last-of-type { border-bottom: none; }
+.sidebar-icon { font-size: 1rem; flex-shrink: 0; margin-top: 0.05rem; }
+
+/* Pick cards — horizontal list style matching Image 1 */
+.result-cards-list { display: flex; flex-direction: column; gap: 1rem; }
+.result-pick-row {
+  display: flex; align-items: center; gap: 1rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius)+6px);
+  background: var(--card); box-shadow: var(--shadow-soft);
+  overflow: hidden; flex-wrap: wrap;
+}
+.result-pick-row-top { border-color: oklch(0.58 0.18 38 / 0.35); box-shadow: var(--shadow-warm); }
+.result-pick-img { width: 120px; height: 90px; object-fit: cover; flex-shrink: 0; }
+@media (min-width: 500px) { .result-pick-img { width: 150px; height: 100px; } }
+.result-pick-body { flex: 1; padding: 0.875rem 0.75rem 0.875rem 0; min-width: 0; }
+.result-pick-name { font-size: 1.0625rem; font-weight: 700; }
+.result-pick-action { padding: 0.875rem; flex-shrink: 0; }
+.result-score-badge { padding: 0.2rem 0.625rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+
+/* Bottom results bar */
+.result-bottom-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 1rem;
+  border: 1px solid var(--border); border-radius: calc(var(--radius)+6px);
+  background: var(--card); padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-soft);
+}
+.result-bottom-bar-inner { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.result-bar-label { font-size: 0.8125rem; color: var(--muted-foreground); font-weight: 500; }
+.result-bar-tag { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.625rem; border-radius: 9999px; background: var(--secondary); font-size: 0.75rem; font-weight: 600; }
+.result-bottom-bar-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* Old pick cards (used in alt results / restaurant page) */
+.pick-card { overflow: hidden; border-radius: calc(var(--radius) + 12px); border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow-soft); }
+.pick-card.highlight { border-color: oklch(0.58 0.18 38 / 0.4); box-shadow: var(--shadow-warm); }
+.pick-card-img { width: 100%; object-fit: cover; }
+.pick-card-img.large { height: 18rem; }
+@media (min-width: 640px) { .pick-card-img.large { height: 20rem; } }
+.pick-card-img.small { height: 11rem; }
+.pick-card-body { padding: 1.25rem; }
+.pick-card-title { font-weight: 700; }
+.pick-card-title.large { font-size: 1.5rem; }
+@media (min-width: 640px) { .pick-card-title.large { font-size: 1.875rem; } }
+.pick-card-title.small { font-size: 1.125rem; }
+.cuisine-chip { padding: 0.125rem 0.625rem; border-radius: 9999px; background: var(--secondary); font-size: 0.6875rem; }
+.score-chip { padding: 0.25rem 0.75rem; border-radius: 9999px; background: oklch(0.55 0.16 150); color: white; font-size: 0.75rem; font-weight: 700; }
+.rating-chip { padding: 0.25rem 0.75rem; border-radius: 9999px; background: rgba(5,5,5,0.75); color: #06B6D4; font-size: 0.875rem; font-weight: 600; border: 1px solid rgba(6,182,212,0.3); backdrop-filter: blur(6px); }
+.top-chip { padding: 0.25rem 0.75rem; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+.distance-chip { padding: 0.125rem 0.625rem; border-radius: 9999px; background: oklch(0.58 0.18 38 / 0.1); color: var(--primary); font-size: 0.6875rem; font-weight: 600; }
+.menu-list { list-style: none; border-top: 1px solid var(--border); }
+.menu-item { display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0; border-bottom: 1px solid var(--border); font-size: 0.875rem; }
+.menu-item:last-child { border-bottom: none; }
+.menu-price { font-weight: 600; }
+.alts-grid { display: grid; gap: 1.25rem; }
+@media (min-width: 640px) { .alts-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ===== FEEDBACK ===== */
+.feedback-box { border-radius: calc(var(--radius) + 12px); border: 1px solid var(--border); background: var(--card); padding: 1.5rem; box-shadow: var(--shadow-soft); }
+@media (min-width: 640px) { .feedback-box { padding: 2rem; } }
+textarea { width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--secondary); color: var(--foreground); font-family: inherit; font-size: 0.875rem; resize: vertical; outline: none; transition: border-color 0.15s; }
+textarea::placeholder { color: var(--muted-foreground); }
+textarea:focus { border-color: var(--primary); }
+
+/* ===== RESTAURANT PAGE ===== */
+.restaurant-details-grid { display: grid; gap: 1.5rem; margin-top: 2rem; }
+@media (min-width: 960px) { .restaurant-details-grid { grid-template-columns: 1fr 360px; } }
+.map-frame { height: 18rem; width: 100%; border: 0; border-radius: calc(var(--radius) + 4px); }
+
+/* ===== ABOUT / HELP ===== */
+.prose { max-width: 48rem; }
+.prose h2 { margin-top: 2.5rem; font-size: 1.5rem; }
+.prose p, .prose ol, .prose ul { margin-top: 0.75rem; color: rgba(255,255,255,0.75); }
+.prose ol { padding-left: 1.5rem; }
+.prose li { margin-top: 0.5rem; }
+details { border-radius: calc(var(--radius) + 4px); border: 1px solid var(--border); background: var(--card); padding: 1.25rem; box-shadow: var(--shadow-soft); margin-bottom: 1rem; }
+details summary { cursor: pointer; font-weight: 600; }
+details p { margin-top: 0.5rem; color: rgba(255,255,255,0.7); }
+
+/* ===== SECTION CARD ===== */
+.section-card { border-radius: calc(var(--radius) + 4px); border: 1px solid var(--border); background: var(--card); padding: 1.25rem; box-shadow: var(--shadow-soft); }
+.section-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; color: var(--primary); font-weight: 600; }
+
+/* ===== FLEX / GRID UTILS ===== */
+.flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-start { align-items: flex-start; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.gap-4 { gap: 1rem; }
+.gap-6 { gap: 1.5rem; }
+.mt-1 { margin-top: 0.25rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-3 { margin-top: 0.75rem; }
+.mt-4 { margin-top: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
+.mt-8 { margin-top: 2rem; }
+.w-full { width: 100%; }
+.text-center { text-align: center; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.space-y-4 > * + * { margin-top: 1rem; }
+.space-y-6 > * + * { margin-top: 1.5rem; }
+.space-y-8 > * + * { margin-top: 2rem; }
+
+/* ===== ANIMATIONS ===== */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@keyframes underlineIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes letterRise { from { transform: translateY(0.6em); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== MODALS ===== */
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 1rem; animation: fadeIn 0.2s ease-out; }
+.modal-box { position: relative; width: 100%; max-width: 56rem; height: 90vh; overflow: hidden; border-radius: calc(var(--radius) + 8px); background: var(--card); box-shadow: 0 25px 60px rgba(0,0,0,0.35); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 0.75rem 1.25rem; }
+.modal-content { height: calc(90vh - 60px); }
+.modal-iframe { width: 100%; height: 100%; border: 0; }
+
+/* Filters modal */
+.filters-modal-box { position: relative; width: 100%; max-width: 28rem; border-radius: calc(var(--radius)+8px); background: var(--card); box-shadow: 0 25px 60px rgba(0,0,0,0.35); padding: 2rem; }
+.filter-row { margin-top: 1.25rem; }
+.filter-label { font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.375rem; display: block; }
+
+/* ===== TOAST ===== */
+.toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; padding: 0.75rem 1.25rem; border-radius: var(--radius); background: #1a1a1a; color: #ffffff; border: 1px solid rgba(255,255,255,0.1); font-size: 0.875rem; font-weight: 500; box-shadow: var(--shadow-warm); animation: fadeIn 0.3s ease-out; pointer-events: none; }
+/* ===== LOADING ===== */
+.loading-overlay { position: fixed; inset: 0; z-index: 200; background: var(--background); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; }
+.spinner { width: 2.5rem; height: 2.5rem; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+/* ===== MISC ===== */
+.divider { height: 1px; background: var(--border); margin: 2rem 0; }
+.rounded-full { border-radius: 9999px; }
+.overflow-hidden { overflow: hidden; }
+.relative { position: relative; }
+.inline-block { display: inline-block; }
+
+/* Current search box */
+.current-search-box { background: #1a1a1a; border: 1px solid rgba(255,255,255,0.08); border-radius: calc(var(--radius) + 4px); padding: 1.25rem; margin-top: 1rem; }
+.search-location-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; border-radius: 9999px; background: rgba(6,182,212,0.1); color: var(--primary); font-size: 0.875rem; font-weight: 500; margin-top: 0.5rem; border: 1px solid rgba(6,182,212,0.2); }
+/* Trust section */
+.trust-section { border-radius: calc(var(--radius) + 12px); border: 1px solid var(--border); background: var(--card); padding: 2rem; text-align: center; box-shadow: var(--shadow-soft); }
+
+/* Support page cards */
+.support-card { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; padding: 2rem 1.25rem; border-radius: calc(var(--radius)+8px); text-decoration: none; transition: box-shadow 0.2s, transform 0.2s; cursor: pointer; }
+.support-card:hover { transform: translateY(-3px); }
+/* Force all address/muted text in cards to be readable on dark bg */
+.pick-card p, .pick-card span, .pick-card div,
+.result-pick-body p, .result-pick-body span {
+  color: inherit;
+}
+.pick-card-body p { color: #999999; }
+</style>
+</head>
+
+<body>
+<!-- LOADING OVERLAY -->
+<div id="loading" class="loading-overlay">
+  <div class="spinner"></div>
+  <p style="color:var(--muted-foreground);font-size:0.875rem">Loading restaurant data…</p>
+</div>
+
+<!-- SITE HEADER -->
+<header class="site-header">
+  <div class="site-header-inner">
+    <a href="#" onclick="navigate('home')" class="site-logo">
+    <span>🍽️</span> CommunalTable
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#ef4444;margin-left:4px;animation:pulse 2s infinite;vertical-align:middle"></span>
+    </a>
+    <nav class="site-nav">
+      <a href="#" onclick="navigate('home')" id="nav-home" class="active">Home</a>
+      <a href="#" onclick="navigate('about')" id="nav-about">About</a>
+      <a href="#" onclick="navigate('help')" id="nav-help">Help</a>
+      <a href="#" onclick="navigate('support')">Support</a>
+    </nav>
+    <div style="display:flex;gap:0.5rem">
+  <button class="btn btn-outline" onclick="openRemoteModal()" style="font-size:0.875rem">📱 Remote</button>
+  <button class="btn btn-primary" onclick="startGroup()" style="font-size:0.875rem">Start Group</button>
+</div>
+
+  </div>
+</header>
+
+<!-- MAIN CONTENT AREA -->
+<div id="app">
+
+<!-- ========== HOME PAGE ========== -->
+<div id="page-home" class="page active">
+  <main>
+    <div class="space-y-8">
+
+      <!-- HERO -->
+      <section class="hero-section">
+        <div class="hero-inner">
+          <div style="position:relative;z-index:1">
+            <span class="hero-badge">
+              <span class="hero-badge-dot"></span>
+              Anonymous · No accounts
+            </span>
+            <h1 class="hero-title">
+              <span class="brand" id="hero-wordmark"></span>
+              <span class="sub">Where should <span class="hero-underline">we eat?</span></span>
+            </h1>
+            <p class="hero-desc">
+              Everyone votes silently. We blend cuisine, budget and allergies into one fair pick — with photo, full menu and live map.
+            </p>
+            <div class="hero-actions">
+              <button class="btn btn-primary btn-lg" onclick="startGroup()" style="box-shadow:var(--shadow-warm)">
+                🚀 Start a group
+              </button>
+              <a href="#themes" class="btn btn-outline" style="border-radius:9999px">Browse by vibe →</a>
+            </div>
+          </div>
+          <div class="hero-img-wrap">
+            <div class="cube-wrapper">
+              <div class="cube-face front">
+                <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=70" alt="Dining" />
+                <div class="cube-face-label">Dine Together</div>
+              </div>
+              <div class="cube-face bottom">
+                <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=600&q=70" alt="Fine dining" />
+                <div class="cube-face-label">Pick a Vibe</div>
+              </div>
+              <div class="cube-face back">
+                <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=70" alt="Restaurant" />
+                <div class="cube-face-label">Vote Anonymous</div>
+              </div>
+              <div class="cube-face top">
+                <img src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=70" alt="Food" />
+                <div class="cube-face-label">Fair Result</div>
+              </div>
+            </div>
+            <span class="hero-float-chip anon">🔒 anonymous</span>
+            <span class="hero-float-chip sync">⚡ instant picks</span>
+          </div>
+        </div>
+        <div class="marquee-strip">
+          <div style="display:flex;overflow:hidden">
+            <div class="marquee-inner" id="marquee1"></div>
+            <div class="marquee-inner" id="marquee2" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LOCATION -->
+      <section class="location-section">
+        <div>
+          <p class="step-label">Step 1</p>
+          <h2 style="font-size:1.875rem;font-weight:700;margin-top:0.25rem">Pick a place to search</h2>
+          <p style="margin-top:0.5rem;color:var(--muted-foreground)">Click anywhere on the map to drop a pin, or pick a state manually.</p>
+          <div class="grid-2" style="margin-top:1.25rem">
+            <div>
+              <label class="label">State</label>
+              <select id="state-select" class="select-field" onchange="onStateChange()">
+                <option value="">Select your state</option>
+              </select>
+            </div>
+            <div>
+              <label class="label">City (optional)</label>
+              <select id="city-select" class="select-field" disabled onchange="onCityChange()">
+                <option value="">Pick state first</option>
+              </select>
+            </div>
+          </div>
+          <div class="current-search-box">
+            <div style="font-size:1.5rem">🗺️</div>
+            <div class="font-semibold" style="margin-top:0.5rem">Currently searching</div>
+            <div class="search-location-badge">📍 <span id="current-location-label">Anywhere in India</span></div>
+            <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;width:100%;display:flex;align-items:center;justify-content:center;gap:0.375rem" onclick="locateMe()" id="locate-me-btn">
+              📡 Locate Me
+            </button>
+            <p id="locate-status" style="margin-top:0.375rem;text-align:center;font-size:0.75rem;color:var(--muted-foreground);display:none"></p>
+            <button class="btn btn-primary btn-lg" style="width:100%;margin-top:0.75rem" onclick="startGroup()" id="start-btn-loc" disabled>
+              Start Group →
+            </button>
+            <p id="loc-hint" style="margin-top:0.5rem;text-align:center;font-size:0.75rem;color:var(--muted-foreground)">
+              Pick on the map or select a state to enable.
+            </p>
+          </div>
+        </div>
+        <div>
+          <p class="label" style="margin-bottom:0.5rem">Pick on the map</p>
+          <div id="map"></div>
+          <p id="map-status" style="font-size:0.75rem;color:var(--muted-foreground);margin-top:0.5rem">
+            Click on the map to pick a place, or drag the marker.
+          </p>
+        </div>
+      </section>
+
+      <!-- THEMES -->
+      <section id="themes" style="scroll-margin-top:5rem">
+        <div class="flex justify-between items-start" style="flex-wrap:wrap;gap:0.75rem;margin-bottom:1.5rem">
+          <div>
+            <p class="step-label">Step 2 · Or just browse</p>
+           <h2 style="font-size:clamp(1.5rem,5vw,3rem);font-weight:900;letter-spacing:0.1em;text-transform:uppercase;background:var(--accent-gradient);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Pick a Vibe</h2>
+            <p style="color:var(--muted-foreground)">10 vibes — tap to explore restaurants by mood.</p>
+          </div>
+        </div>
+        <div class="themes-grid" id="themes-grid"></div>
+      </section>
+
+      <!-- TRUST -->
+      <section class="trust-section">
+        <h2 style="font-size:1.5rem">Anonymous, fair, safe.</h2>
+        <p style="margin:0.75rem auto 0;max-width:36rem;color:var(--muted-foreground)">
+          Each person types their preferences silently. Inputs auto-clear so the next person sees a clean form.
+          Budgets are never revealed in the result — only the final pick.
+        </p>
+        <button class="btn btn-primary btn-lg" style="margin-top:1.5rem" onclick="startGroup()">Start a group now →</button>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- ========== SIZE PAGE ========== -->
+<div id="page-size" class="page">
+  <main>
+    <div class="size-card">
+      <p class="text-xs uppercase tracking-wide text-muted">Group setup</p>
+      <h2 style="font-size:1.875rem;margin-top:0.25rem">How many people?</h2>
+      <p style="margin-top:0.5rem;color:var(--muted-foreground)">Each person enters preferences anonymously, one after the other.</p>
+      <input type="number" min="2" max="20" value="3" id="group-size-input" class="size-input" inputmode="numeric" />
+      <div class="flex justify-center gap-3" style="margin-top:1.75rem;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="goBack()">← Back</button>
+        <button class="btn btn-primary btn-lg" onclick="beginCollect()">Begin (Person 1) →</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ========== COLLECT PAGE ========== -->
+<div id="page-collect" class="page">
+  <main>
+    <div class="flex justify-between items-start" style="flex-wrap:wrap;gap:0.75rem;margin-bottom:1.5rem">
+      <div>
+        <span class="badge badge-primary">🔒 Person <span id="collect-person-num">1</span> of <span id="collect-total-num">3</span> · Anonymous</span>
+        <h1 style="font-size:clamp(1.75rem,5vw,2.5rem);margin-top:0.5rem">Your turn — type silently</h1>
+        <p style="margin-top:0.375rem;color:var(--muted-foreground)">
+          Searching in <strong id="collect-place">your area</strong>. Nothing you type is shown to anyone else.
+        </p>
+      </div>
+      <div class="progress-dots" id="progress-dots"></div>
+    </div>
+
+    <div class="collect-grid">
+      <div class="space-y-4">
+        <!-- Cuisines -->
+        <div class="section-card">
+          <div class="section-header">🍽️ <span>Cuisines you'd love</span></div>
+          <div class="flex gap-2">
+            <input type="text" id="cuisine-input" class="input-field" style="flex:1;min-width:0"
+              placeholder="Type a cuisine (e.g., Biryani) and press Enter" autocomplete="off"
+              onkeydown="handleCuisineKey(event)" />
+            <button class="btn btn-primary" onclick="addCuisine()">Add</button>
+          </div>
+          <div class="cuisine-tags" id="cuisine-tags"></div>
+          <div style="margin-top:0.875rem">
+            <p style="font-size:0.75rem;font-weight:600;color:var(--muted-foreground);margin-bottom:0.5rem">▼ Quick add — click any to add instantly:</p>
+            <div class="cuisine-suggestions" id="cuisine-suggestions"></div>
+          </div>
+        </div>
+
+        <!-- Budget -->
+        <div class="section-card">
+          <div class="section-header">💵 <span>Your max budget per person</span></div>
+          <div class="flex items-center gap-3">
+            <span style="font-size:1.25rem;font-weight:700;color:var(--primary)">₹</span>
+            <input type="number" id="budget-input" min="50" max="10000" value="600"
+              class="input-field" style="width:10rem;height:3rem;font-size:1.25rem;font-weight:600" inputmode="numeric" />
+            <span style="font-size:0.875rem;color:var(--muted-foreground)">per person · type any amount</span>
+          </div>
+          <p style="font-size:0.75rem;color:var(--muted-foreground);margin-top:0.5rem">
+            We'll use the lowest budget across the group so nobody overspends. Budget is never shown in the result.
+          </p>
+        </div>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Allergies -->
+        <div class="section-card">
+          <div class="section-header">⚠️ <span>Allergies / dietary</span></div>
+          <div class="allergy-grid" id="allergy-grid"></div>
+          <p style="font-size:0.75rem;color:var(--muted-foreground);margin-top:0.75rem">Got something else?</p>
+          <div class="flex gap-2" style="margin-top:0.375rem">
+            <input type="text" id="custom-allergy-input" class="input-field" style="flex:1;min-width:0"
+              placeholder="e.g. onion, garlic, peanuts"
+              onkeydown="handleCustomAllergyKey(event)" />
+            <button class="btn btn-primary btn-sm" onclick="addCustomAllergy()">Add</button>
+          </div>
+          <div id="custom-allergy-tags" class="cuisine-tags" style="margin-top:0.375rem"></div>
+        </div>
+
+        <!-- Privacy + Submit -->
+        <div class="privacy-box">
+          <p style="font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;opacity:0.9">Privacy</p>
+          <p style="font-size:0.875rem;margin-top:0.375rem;opacity:0.95">Nothing you type is saved or shown to others. Pressing submit clears the form completely.</p>
+          <button id="submit-member-btn" class="btn w-full" style="margin-top:1rem;background:var(--card);color:var(--primary);font-weight:600"
+            onclick="submitMember()" disabled>
+            Submit — pass to person 2
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ========== RESULT PAGE ========== -->
+<div id="page-result" class="page">
+  <main>
+    <div id="result-content"></div>
+  </main>
+</div>
+
+<!-- ========== RESTAURANT PAGE ========== -->
+<div id="page-restaurant" class="page">
+  <main>
+    <div id="restaurant-content"></div>
+  </main>
+</div>
+
+<!-- ========== ABOUT PAGE ========== -->
+<div id="page-about" class="page">
+  <main>
+    <div class="prose">
+      <button class="btn btn-outline btn-sm" style="margin-bottom:1.5rem" onclick="goBack()">← Back</button>
+      <h1 style="font-size:2.5rem;font-weight:800;letter-spacing:-0.02em">About CommunalTable</h1>
+      <p style="margin-top:1rem;color:var(--muted-foreground)">
+        Picking a restaurant with a group is hard — someone always ends up unheard. CommunalTable
+        fixes that with anonymous voting: cuisine, budget and allergy inputs are merged into a
+        fair group decision without revealing what any single person picked.
+      </p>
+      <h2>How it works</h2>
+      <ol>
+        <li>Set the group size and theme.</li>
+        <li>Each person types their preferences silently — no dialogues, no peeking.</li>
+        <li>We aggregate votes, exclude any allergy-risky places, and rank by fit.</li>
+        <li>If nothing perfectly matches, we still suggest top-rated nearby spots.</li>
+      </ol>
+      <h2>Privacy</h2>
+      <p>
+        Nothing leaves your device. We don't track who voted for what — only the aggregate result
+        is shown. Budgets are never displayed in the final pick.
+      </p>
+      <h2>Data</h2>
+      <p>
+        We use a public restaurant catalog of 60K+ Indian restaurants. Menu items shown are
+        indicative based on cuisine type; always verify on the restaurant's own website or Google.
+      </p>
+    </div>
+  </main>
+</div>
+
+<!-- ========== HELP PAGE ========== -->
+<div id="page-help" class="page">
+  <main>
+    <div class="prose">
+      <button class="btn btn-outline btn-sm" style="margin-bottom:1.5rem" onclick="goBack()">← Back</button>
+      <h1 style="font-size:2.5rem;font-weight:800;letter-spacing:-0.02em">Help &amp; FAQ</h1>
+      <div style="margin-top:2rem" id="faq-list"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ========== THEME PAGE ========== -->
+<div id="page-theme" class="page">
+  <main>
+    <div id="theme-content"></div>
+  </main>
+</div>
+
+<!-- ========== SUPPORT PAGE ========== -->
+<div id="page-support" class="page">
+  <main>
+    <div class="prose">
+      <button class="btn btn-outline btn-sm" style="margin-bottom:1.5rem" onclick="goBack()">← Back</button>
+      <h1 style="font-size:2.5rem;font-weight:800;letter-spacing:-0.02em">Support</h1>
+      <p style="margin-top:0.75rem;color:var(--muted-foreground)">
+        Reach out to us — we're happy to help with any questions, feedback, or issues.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1.25rem;margin-top:2rem;max-width:42rem">
+        <a href="https://wa.me/919999999999" target="_blank" rel="noreferrer"
+          class="support-card" style="border:1.5px solid #25D366;background:oklch(0.97 0.04 155 / 0.25)">
+          <span style="font-size:3rem">💬</span>
+          <span style="font-weight:700;font-size:1.125rem;color:#128C7E">WhatsApp</span>
+          <span style="font-size:0.8125rem;color:var(--muted-foreground);text-align:center">Chat with us on WhatsApp</span>
+          <span style="font-size:0.8125rem;font-weight:600;color:#128C7E;margin-top:0.25rem">+91 99999 99999</span>
+        </a>
+        <a href="https://instagram.com/communaltable" target="_blank" rel="noreferrer"
+          class="support-card" style="border:1.5px solid #E1306C;background:oklch(0.97 0.04 5 / 0.2)">
+          <span style="font-size:3rem">📸</span>
+          <span style="font-weight:700;font-size:1.125rem;color:#E1306C">Instagram</span>
+          <span style="font-size:0.8125rem;color:var(--muted-foreground);text-align:center">Follow us &amp; DM on Instagram</span>
+          <span style="font-size:0.8125rem;font-weight:600;color:#E1306C;margin-top:0.25rem">@communaltable</span>
+        </a>
+        <a href="mailto:support@communaltable.in" target="_blank" rel="noreferrer"
+          class="support-card" style="border:1.5px solid #4285F4;background:oklch(0.97 0.03 255 / 0.2)">
+          <span style="font-size:3rem">✉️</span>
+          <span style="font-weight:700;font-size:1.125rem;color:#4285F4">Gmail</span>
+          <span style="font-size:0.8125rem;color:var(--muted-foreground);text-align:center">Email us directly</span>
+          <span style="font-size:0.8125rem;font-weight:600;color:#4285F4;margin-top:0.25rem">support@communaltable.in</span>
+        </a>
+      </div>
+    </div>
+  </main>
+</div>
+<!-- ========== REMOTE HOST WAITING PAGE ========== -->
+<div id="page-remote-host" class="page">
+  <main>
+    <div id="remote-host-content"></div>
+  </main>
+</div>
+
+<!-- ========== REMOTE GUEST PAGE ========== -->
+<div id="page-remote-guest" class="page">
+  <main>
+    <div id="remote-guest-content"></div>
+  </main>
+</div>
+
+</div> <!-- #app -->
+
+<!-- SITE FOOTER -->
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <span style="font-weight:600;color:var(--primary)">CommunalTable</span>
+    <span>© 2026 CommunalTable. Anonymous collaboration for better dining.</span>
+    <div class="site-footer-links">
+      <a href="#" onclick="navigate('about')">About</a>
+      <a href="#" onclick="navigate('help')">Help</a>
+      <a href="#" onclick="navigate('support')">Support</a>
+    </div>
+  </div>
+</footer>
+
+<!-- FILTERS MODAL -->
+<div id="filters-modal" class="modal-backdrop" style="display:none" onclick="closeFiltersModal()">
+  <div class="filters-modal-box" onclick="event.stopPropagation()">
+    <h2 style="font-size:1.25rem;font-weight:700">Edit Preferences</h2>
+    <p style="font-size:0.8125rem;color:var(--muted-foreground);margin-top:0.25rem">Adjust filters and re-run recommendations.</p>
+
+    <div class="filter-row">
+      <label class="filter-label">Minimum Rating</label>
+      <select id="filter-rating" class="select-field">
+        <option value="3.0">3.0 ★ and above</option>
+        <option value="3.5" selected>3.5 ★ and above</option>
+        <option value="4.0">4.0 ★ and above</option>
+        <option value="4.5">4.5 ★ and above</option>
+      </select>
+    </div>
+
+    <div class="filter-row">
+      <label class="filter-label">Max Distance (km) — leave blank for any</label>
+      <input type="number" id="filter-distance" class="input-field" placeholder="e.g. 5" min="1" max="50" />
+    </div>
+
+    <div class="filter-row">
+      <label class="filter-label">Sort By</label>
+      <select id="filter-sort" class="select-field">
+        <option value="relevance">Relevance</option>
+        <option value="rating">Rating</option>
+        <option value="distance">Distance</option>
+      </select>
+    </div>
+
+    <div class="flex gap-3" style="margin-top:1.75rem;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeFiltersModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="applyFilters()">Apply &amp; Refresh</button>
+    </div>
+  </div>
+</div>
+<!-- REMOTE JOIN MODAL -->
+<div id="remote-modal" class="modal-backdrop" style="display:none" onclick="closeRemoteModal()">
+  <div class="filters-modal-box" onclick="event.stopPropagation()" style="max-width:32rem">
+    <h2 style="font-size:1.5rem;font-weight:700">📱 Remote Group</h2>
+    <p style="font-size:0.875rem;color:var(--muted-foreground);margin-top:0.25rem">
+      Collect preferences from people on their own devices — no in-person passing required.
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:1.5rem">
+      <button class="btn btn-primary btn-lg" onclick="startCreateRoom()" style="flex-direction:column;height:auto;padding:1.25rem">
+        <span style="font-size:1.5rem">🏠</span>
+        <span style="margin-top:0.5rem">Create Room</span>
+        <span style="font-size:0.7rem;opacity:0.85;margin-top:0.125rem;font-weight:400">Host a group</span>
+      </button>
+      <button class="btn btn-outline btn-lg" onclick="startJoinRoom()" style="flex-direction:column;height:auto;padding:1.25rem">
+        <span style="font-size:1.5rem">🚪</span>
+        <span style="margin-top:0.5rem">Join Room</span>
+        <span style="font-size:0.7rem;opacity:0.75;margin-top:0.125rem;font-weight:400">Enter a code</span>
+      </button>
+    </div>
+
+    <div id="create-room-form" style="display:none;margin-top:1.5rem">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem">Set up your room</h3>
+      <label class="label">Theme</label>
+      <select id="remote-theme" class="select-field"></select>
+
+      <label class="label" style="margin-top:0.875rem;display:block">Group size</label>
+      <input type="number" id="remote-size" class="input-field" min="2" max="20" value="3" />
+
+      <label class="label" style="margin-top:0.875rem;display:block">City (optional)</label>
+      <input type="text" id="remote-city" class="input-field" placeholder="e.g. Hyderabad" />
+
+      <button class="btn btn-primary btn-lg" style="width:100%;margin-top:1.25rem" onclick="confirmCreateRoom()">
+        Create room →
+      </button>
+    </div>
+
+    <div id="join-room-form" style="display:none;margin-top:1.5rem">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.75rem">Enter room code</h3>
+      <input type="text" id="remote-join-code" class="input-field"
+        placeholder="e.g. AB12CD" maxlength="6"
+        style="text-transform:uppercase;letter-spacing:0.2em;font-size:1.25rem;text-align:center;height:3rem" />
+      <button class="btn btn-primary btn-lg" style="width:100%;margin-top:1.25rem" onclick="confirmJoinRoom()">
+        Join room →
+      </button>
+    </div>
+
+    <button class="btn btn-outline btn-sm" style="margin-top:1.25rem;width:100%" onclick="closeRemoteModal()">
+      Cancel
+    </button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast" style="display:none"></div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

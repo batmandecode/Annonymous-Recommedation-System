@@ -1,0 +1,308 @@
+================================================================
+       COMMUNALTABLE — FULL PROJECT DETAILS
+       Anonymous Group Restaurant Recommendation System
+================================================================
+
+PROJECT NAME     : CommunalTable
+TAGLINE          : Anonymous group voting for restaurants.
+                   Combine cuisine, budget, and allergies fairly.
+REPOSITORY NAME  : Annonymous-Recommmedation-System
+GITHUB OWNER     : batmandecode
+BUILT WITH       : Python (Flask) + Vanilla JavaScript
+CATEGORY         : Full-Stack Web Application
+
+
+----------------------------------------------------------------
+  1. WHAT IS THIS APP?
+----------------------------------------------------------------
+
+CommunalTable is a web application that helps groups of people
+(friends, families, coworkers) decide on a restaurant together —
+anonymously. Each person in a group submits their own cuisine
+preferences, budget, and food allergies privately, and the app
+automatically recommends the best 3 restaurants that satisfy
+everyone's needs fairly.
+
+No one sees what the other person picked — fully anonymous.
+
+
+----------------------------------------------------------------
+  2. KEY FEATURES
+----------------------------------------------------------------
+
+[A] ANONYMOUS GROUP ROOMS
+    - Host creates a "room" with a 6-character code (e.g. XY7K3M)
+    - Guests join using the code or a sharable link (/join/CODE)
+    - A QR code is auto-generated so guests can scan and join
+    - Each person submits preferences privately
+    - Nobody sees each other's choices
+
+[B] SMART RECOMMENDATION ENGINE
+    - Returns Top 3 restaurants matching the whole group
+    - Uses a multi-factor scoring system:
+        * Cuisine match     → 33% weight (TF-IDF algorithm)
+        * Rating            → 25% weight
+        * Budget fit        → 18% weight
+        * Distance          → 14% weight (Haversine formula)
+        * Sentiment/feedback→ 10% weight
+    - Falls back to top-rated city restaurants if no perfect match
+
+[C] CUISINE PREFERENCE INPUT
+    - Each person selects their preferred cuisines
+    - Supports: North Indian, South Indian, Chinese, Italian,
+      Continental, Biryani, Fast Food, Healthy Food, Cafe,
+      Mughlai, Seafood, Pizzas, Burgers, Desserts, and more
+
+[D] BUDGET FILTERING
+    - Each member sets their maximum budget (price per person)
+    - The system uses the lowest budget in the group so everyone
+      can comfortably afford the recommended restaurant
+
+[E] ALLERGY / DIETARY FILTERING
+    - Supported allergies: Dairy, Gluten, Nuts, Seafood, Egg,
+      Shellfish
+    - Restaurants with ingredients matching any allergy are
+      automatically excluded from results
+
+[F] OCCASION / THEME SELECTION
+    Supported themes (affects cuisine scoring boost):
+      - Family       → Thalis, South Indian, North Indian
+      - Romantic     → Italian, Continental, Desserts
+      - Casual       → Pizzas, Fast Food, Chinese, Burgers
+      - Birthday     → Pizzas, Desserts, Bakery, Ice Cream
+      - Business     → Continental, North Indian, Healthy Food
+      - Late Night   → Fast Food, Biryani, Mughlai, Burgers
+      - Brunch       → Cafe, Bakery, Continental, Beverages
+      - Solo         → Cafe, Bakery, Beverages, Desserts
+      - Healthy      → Healthy Food, Salads, Cafe, Continental
+      - Pet-friendly → Cafe, Continental, Beverages, Bakery
+
+[G] CITY SUPPORT
+    Supported major Indian cities:
+      Mumbai, Delhi, Bangalore, Hyderabad, Chennai, Kolkata,
+      Pune, Ahmedabad, Jaipur, Lucknow
+
+[H] ADVANCED FILTERS
+    - Filter by minimum star rating (e.g. above 4.0 ★)
+    - Filter by maximum distance (e.g. within 5 km)
+    - Sort results by: Relevance / Rating / Distance
+
+[I] INTERACTIVE MAP
+    - Shows restaurant locations on a Leaflet.js map
+    - Real GPS coordinates used for distance calculation
+    - Haversine formula for accurate distance (in km)
+
+[J] REAL-TIME UPDATES (Socket.IO)
+    - Host sees live progress as guests submit their preferences
+    - Progress bar shows "2 of 4 submitted" in real time
+    - Results are broadcast to all members simultaneously
+    - No page refresh needed
+
+[K] FEEDBACK / RE-RECOMMENDATION
+    - After results, users can give feedback (liked/disliked)
+    - System uses sentiment score to re-rank on next search
+
+[L] PRIVACY BY DESIGN
+    - Member preference data is wiped from server RAM immediately
+      after recommendations are generated
+    - No user accounts, no login required, fully anonymous
+
+
+----------------------------------------------------------------
+  3. TECH STACK
+----------------------------------------------------------------
+
+BACKEND
+  Language      : Python 3
+  Framework     : Flask
+  Real-time     : Flask-SocketIO (with Eventlet async mode)
+  CORS          : Flask-CORS
+  Server        : Gunicorn (production)
+  Data Store    : In-memory (Python dict, no database)
+
+FRONTEND
+  Language      : Vanilla JavaScript (no React/Vue)
+  Styling       : Pure CSS with CSS Variables (dark theme)
+  Fonts         : Google Fonts — Inter
+  Animations    : GSAP 3.12.5 + SplitText
+  Map           : Leaflet.js 1.9.4
+  QR Code       : QRCode.js
+  Real-time     : Socket.IO 4.7.5 (client)
+
+DATA FILES
+  restaurants.json   : ~14MB, full restaurant catalog
+  city-defaults.json : Default city settings
+
+
+----------------------------------------------------------------
+  4. PROJECT FILE STRUCTURE
+----------------------------------------------------------------
+
+genspark website - Copy/
+│
+├── index.html              ← Single Page App (entire frontend)
+├── server.py               ← Flask backend + Socket.IO logic
+├── requirements.txt        ← Python dependencies
+├── Procfile                ← Deployment command for Heroku/Render
+│
+├── static/
+│   └── app.js              ← All frontend JavaScript (~97KB)
+│
+└── public/
+    ├── restaurants.json    ← Full restaurant database (~14MB)
+    └── city-defaults.json  ← City-wise default settings
+
+
+----------------------------------------------------------------
+  5. API ENDPOINTS
+----------------------------------------------------------------
+
+GET  /                          → Serves the main SPA (index.html)
+GET  /join/<CODE>               → Guest join page (same index.html)
+
+GET  /api/restaurants           → List restaurants (filter by city)
+POST /api/recommend             → Get recommendations (solo mode)
+GET  /api/city-defaults         → Get city default settings
+GET  /api/restaurant/<id>       → Get single restaurant by ID
+GET  /api/room/<code>           → Get room info for a join code
+
+Socket.IO Events:
+  connect            → Server confirms connection with session ID
+  create_room        → Host creates a new group room
+  join_room_as_guest → Guest joins using a room code
+  submit_guest_prefs → Guest submits cuisine/budget/allergy prefs
+  guest_joined       → Broadcast: new guest joined
+  progress_update    → Broadcast: how many have submitted so far
+  room_result        → Broadcast: final recommendations to all
+  close_room         → Host closes and deletes the room
+
+
+----------------------------------------------------------------
+  6. RECOMMENDATION ALGORITHM (HOW IT WORKS)
+----------------------------------------------------------------
+
+STEP 1 — Filter Pool
+  Remove restaurants where:
+    - Price > group's minimum budget cap
+    - City doesn't match selected city
+    - Contains allergy-flagged cuisine tags
+    - Rating below minimum filter
+
+STEP 2 — Score Each Restaurant
+  For each restaurant in the filtered pool:
+
+  Cuisine Score (TF-IDF):
+    Uses Term Frequency × Inverse Document Frequency
+    Rare/specific cuisines (Awadhi, Chettinad) rank higher
+    than very common ones (Beverages, Fast Food)
+
+  Rating Score:
+    Normalized from 0-1 scale (2★ = 0, 5★ = 1)
+
+  Budget Score:
+    Full score if within budget, 0 if over budget
+    Slight bonus for lower price
+
+  Distance Score:
+    Uses real lat/lng coordinates from dataset
+    Haversine formula calculates actual km distance
+    Score drops to 0 beyond 25 km
+
+  Sentiment Score:
+    Based on previous feedback (liked/disliked tags)
+    Starts at 0.5 (neutral), goes up/down based on feedback
+
+  FINAL SCORE = 
+    (Cuisine × 0.33) + (Rating × 0.25) + (Budget × 0.18)
+    + (Distance × 0.14) + (Sentiment × 0.10)
+
+STEP 3 — Sort & Pick Top 3
+  Sort by composite score, pick top 3 with cuisine match.
+  Fallback: top-rated restaurants in city if fewer than 3 found.
+
+
+----------------------------------------------------------------
+  7. DEPENDENCIES (requirements.txt)
+----------------------------------------------------------------
+
+  flask
+  flask-cors
+  flask-socketio
+  eventlet
+  gunicorn
+
+
+----------------------------------------------------------------
+  8. HOW TO RUN LOCALLY
+----------------------------------------------------------------
+
+Step 1: Extract the ZIP file
+Step 2: Open terminal in the project folder
+Step 3: Install dependencies
+          pip install flask flask-cors flask-socketio eventlet
+Step 4: Run the server
+          python server.py
+Step 5: Open browser → http://localhost:5000
+
+
+----------------------------------------------------------------
+  9. DEPLOYMENT OPTIONS
+----------------------------------------------------------------
+
+OPTION A — Railway (Recommended, Free tier available)
+  1. Push code to GitHub
+  2. Go to railway.app → New Project → Deploy from GitHub
+  3. Railway auto-reads Procfile and deploys
+  4. Get a live URL instantly
+
+OPTION B — Render
+  1. Push code to GitHub
+  2. Go to render.com → New Web Service
+  3. Build Command: pip install -r requirements.txt
+  4. Start Command: gunicorn --worker-class eventlet -w 1 server:app
+  Note: Use Starter plan ($7/mo) for persistent Socket.IO
+
+OPTION C — Heroku
+  1. heroku create your-app-name
+  2. git push heroku main
+  (Procfile is already configured)
+
+PRODUCTION PROCFILE COMMAND:
+  web: gunicorn --worker-class eventlet -w 1 server:app
+
+
+----------------------------------------------------------------
+  10. IMPORTANT NOTES FOR PRODUCTION
+----------------------------------------------------------------
+
+1. Change the SECRET_KEY in server.py before deploying:
+     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback')
+   Then set SECRET_KEY as an environment variable in your host.
+
+2. restaurants.json is 14MB — ensure your hosting plan supports
+   large static file serving.
+
+3. Only 1 Gunicorn worker (-w 1) should be used because Socket.IO
+   rooms are stored in-memory. Multiple workers would not share
+   room state.
+
+4. Member preference data is automatically wiped from RAM after
+   recommendations are generated (privacy feature).
+
+
+----------------------------------------------------------------
+  11. DESIGN & UI
+----------------------------------------------------------------
+
+  Theme       : Dark (near-black background #050505)
+  Accent      : Cyan-to-Pink gradient (#06B6D4 → #EC4899)
+  Font        : Inter (Google Fonts)
+  Border      : Subtle white 10% opacity
+  Cards       : Dark card (#111111) with soft shadow
+  Animations  : GSAP for smooth transitions and text splits
+  Responsive  : Mobile-first, works on all screen sizes
+
+
+================================================================
+  END OF PROJECT DETAILS
+================================================================
